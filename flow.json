@@ -1,0 +1,600 @@
+[
+    {
+        "id": "5e3c009b6b4ef141",
+        "type": "tab",
+        "label": "Firefly",
+        "disabled": false,
+        "info": "",
+        "env":
+        []
+    },
+    {
+        "id": "d8b6647cb758629f",
+        "type": "http request",
+        "z": "5e3c009b6b4ef141",
+        "name": "Get recent transactions",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "query",
+        "url": "{{{fireflyUrl}}}/api/v1/transactions",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "bearer",
+        "senderr": false,
+        "headers":
+        [],
+        "x": 570,
+        "y": 80,
+        "wires":
+        [
+            [
+                "b9b760fb9b948f9a"
+            ]
+        ]
+    },
+    {
+        "id": "c41632aa78755cac",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Get latest covered timestamp",
+        "func": "function timestampToDateString(timestamp) {\n    const date = new Date(timestamp);\n    const year = date.getFullYear();\n    const month = String(date.getMonth() + 1).padStart(2, '0'); // months are 0-indexed in JavaScript\n    const day = String(date.getDate()).padStart(2, '0');\n\n    return `${year}-${month}-${day}`;\n}\nlet fireflyUrl = global.get(\"fireflyUrl\", \"store\") || null;\nif (!fireflyUrl) {\n    node.error(\"No fireflyUrl defined\");\n    return null;\n}\nlet lastProcessedTimestamp = flow.get(\"fireflyBudgetLatestTimestamp\", \"store\") || 0;\nlet lastIdsProcessedJson = flow.get(\"fireflyBudgetIdsProcessedToday\", \"store\") || {ids:[]};\nlet lastIdsProcessed = lastIdsProcessedJson.ids;\nlet start = timestampToDateString(lastProcessedTimestamp);\nlet processingTimestamp = msg.processingTimestamp;\nlet end = timestampToDateString(processingTimestamp);\nreturn {\n    fireflyUrl,\n    lastProcessedTimestamp,\n    processingTimestamp,\n    lastIdsProcessed,\n    payload: {\n        start,\n        end,\n        type: \"withdrawal\",\n    },\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 310,
+        "y": 80,
+        "wires":
+        [
+            [
+                "d8b6647cb758629f"
+            ]
+        ]
+    },
+    {
+        "id": "53183a5b1a22c7e9",
+        "type": "inject",
+        "z": "5e3c009b6b4ef141",
+        "name": "Test",
+        "props":
+        [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 90,
+        "y": 20,
+        "wires":
+        [
+            [
+                "c863a164b44a0a14"
+            ]
+        ]
+    },
+    {
+        "id": "62d4096095b2db39",
+        "type": "inject",
+        "z": "5e3c009b6b4ef141",
+        "name": "Interval",
+        "props":
+        [
+            {
+                "p": "processingTimestamp",
+                "v": "",
+                "vt": "date"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "600",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 100,
+        "y": 80,
+        "wires":
+        [
+            [
+                "c41632aa78755cac"
+            ]
+        ]
+    },
+    {
+        "id": "c863a164b44a0a14",
+        "type": "change",
+        "z": "5e3c009b6b4ef141",
+        "name": "Set latest timestamp",
+        "rules":
+        [
+            {
+                "t": "set",
+                "p": "#:(store)::fireflyBudgetLatestTimestamp",
+                "pt": "flow",
+                "to": "1692074737000",
+                "tot": "num"
+            },
+            {
+                "t": "set",
+                "p": "#:(store)::fireflyBudgetIdsProcessedToday",
+                "pt": "flow",
+                "to": "{\"ids\":[]}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "processingTimestamp",
+                "pt": "msg",
+                "to": "1692074737000",
+                "tot": "num"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 260,
+        "y": 20,
+        "wires":
+        [
+            []
+        ]
+    },
+    {
+        "id": "38fcf0c3430e5a08",
+        "type": "split",
+        "z": "5e3c009b6b4ef141",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 90,
+        "y": 320,
+        "wires":
+        [
+            [
+                "79d32bb58423ade1"
+            ]
+        ]
+    },
+    {
+        "id": "8f88b071ce75e4d4",
+        "type": "change",
+        "z": "5e3c009b6b4ef141",
+        "name": "Shift payload",
+        "rules":
+        [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.data",
+                "tot": "msg",
+                "dc": true
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 110,
+        "y": 240,
+        "wires":
+        [
+            [
+                "c1c71e855855af73"
+            ]
+        ]
+    },
+    {
+        "id": "b9b760fb9b948f9a",
+        "type": "switch",
+        "z": "5e3c009b6b4ef141",
+        "name": "Drop messages with too many results",
+        "property": "payload.meta.pagination.total_pages",
+        "propertyType": "msg",
+        "rules":
+        [
+            {
+                "t": "eq",
+                "v": "1",
+                "vt": "num"
+            },
+            {
+                "t": "gt",
+                "v": "1",
+                "vt": "num"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 190,
+        "y": 160,
+        "wires":
+        [
+            [
+                "8f88b071ce75e4d4",
+                "999054927be107e2",
+                "fce3a7f5e5582954"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "999054927be107e2",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Update processed ids and date",
+        "func": "function mergeAndDeduplicate(arr1, arr2) {\n    let merged = arr1.concat(arr2);\n    let unique = [...new Set(merged)];\n    return unique;\n}\n\nlet lastProcessedDate = new Date(msg.lastProcessedTimestamp);\nlet processingDate = new Date(msg.processingTimestamp);\nflow.set(\"fireflyBudgetLatestTimestamp\", msg.processingTimestamp, \"store\");\nlet lastIdsProcessed = msg.lastIdsProcessed;\nlet currentIdsProcessed = msg.payload.data.reduce(\n    (accumulator, currentValue) => {\n        accumulator.push(Number(currentValue.id));\n        return accumulator;\n    }, []);\nlet idsToWrite;\nif (lastProcessedDate.getDay() === processingDate.getDay()) {\n    // If we have not crossed over a day boundary since last processing,\n    //  add to the fireflyBudgetIdsProcessedToday array\n    idsToWrite = mergeAndDeduplicate(lastIdsProcessed, currentIdsProcessed);\n} else {\n    // If we have crossed over a day boundary since last processing,\n    //  reset the fireflyBudgetIdsProcessedToday array\n    // We may have some dingleberry ids from the previous day, but they\n    //  have no negative effect and it's not worth the effort to filter them out\n    idsToWrite = currentIdsProcessed;\n}\n// This assumes that the processing happening in parallel is successful,\n//  which we're going to go with for now for simplicity\nflow.set(\"fireflyBudgetIdsProcessedToday\", {ids:idsToWrite}, \"store\");",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 550,
+        "y": 160,
+        "wires":
+        [
+            []
+        ]
+    },
+    {
+        "id": "b9c3d98f1e6dd13b",
+        "type": "http request",
+        "z": "5e3c009b6b4ef141",
+        "name": "Get budget limits for budget",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "query",
+        "url": "{{{fireflyUrl}}}/api/v1/budgets/{{{budgetId}}}/limits",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "bearer",
+        "senderr": false,
+        "headers":
+        [],
+        "x": 160,
+        "y": 400,
+        "wires":
+        [
+            [
+                "ed60cc9b4d975ba8"
+            ]
+        ]
+    },
+    {
+        "id": "da21cd67302a9b9a",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Prepare budget limit query",
+        "func": "let txs = msg.payload.attributes.transactions;\nif (txs.length !== 1) {\n    node.error(`Unexpected journal count ${txs.length} for tx id ${msg.payload.id}; dropping message.`);\n    return null;\n}\nlet budgetId = Number(txs[0].budget_id);\n\nconst now = new Date();\n\n// First day of the current month\nconst firstDay = new Date(now.getFullYear(), now.getMonth(), 1);\nconst firstDayFormatted = `${firstDay.getFullYear()}-${String(firstDay.getMonth() + 1).padStart(2, '0')}-${String(firstDay.getDate()).padStart(2, '0')}`;\n\n// Last day of the current month\nconst lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 0th day of next month = last day of current month\nconst lastDayFormatted = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;\n\nreturn {\n    ...msg,\n    budgetId,\n    tx: msg.payload,\n    payload: {\n        start: firstDayFormatted,\n        end: lastDayFormatted,\n    },\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 560,
+        "y": 320,
+        "wires":
+        [
+            [
+                "b9c3d98f1e6dd13b",
+                "042a1f1116d33a65"
+            ]
+        ]
+    },
+    {
+        "id": "ed60cc9b4d975ba8",
+        "type": "switch",
+        "z": "5e3c009b6b4ef141",
+        "name": "Drop messages with no budget limits",
+        "property": "payload.data",
+        "propertyType": "msg",
+        "rules":
+        [
+            {
+                "t": "jsonata_exp",
+                "v": "$count(payload.data) > 0",
+                "vt": "jsonata"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 450,
+        "y": 400,
+        "wires":
+        [
+            [
+                "d9ea456888061867",
+                "e6b30fc911073c7a"
+            ]
+        ]
+    },
+    {
+        "id": "baf98cb12f7d9290",
+        "type": "api-call-service",
+        "z": "5e3c009b6b4ef141",
+        "name": "Send budget notification to Dan",
+        "server": "6c181b53.32fa14",
+        "version": 5,
+        "debugenabled": false,
+        "domain": "notify",
+        "service": "mobile_app_dvk_iphone",
+        "areaId":
+        [],
+        "deviceId":
+        [],
+        "entityId":
+        [],
+        "data": "{\t    \"title\":\"Budget Update\",\t    \"message\": \"Transaction on \" & budgetName & \": $\" & spent & \" spent of $\" & totalAllocated & \" budgeted this month.\"\t}",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties":
+        [],
+        "queue": "none",
+        "x": 370,
+        "y": 480,
+        "wires":
+        [
+            []
+        ]
+    },
+    {
+        "id": "d9ea456888061867",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Prepare notification",
+        "func": "let limits = msg.payload.data;\nif (limits.length !== 1) {\n    node.error(`Unexpected budget limit count ${limits.length}; dropping message.`);\n    return null;\n}\nlet limit = limits[0];\nlet budget = msg.payload.included[0];\nlet budgetName = budget.attributes.name;\nlet spent = Math.abs(Number(limit.attributes.spent));\nlet totalAllocated = Number(limit.attributes.amount);\n\nlet out = {\n    ...msg,\n    budgetName,\n    spent,\n    totalAllocated,\n};\ndelete out['payload'];\nreturn out;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 130,
+        "y": 480,
+        "wires":
+        [
+            [
+                "baf98cb12f7d9290"
+            ]
+        ]
+    },
+    {
+        "id": "79d32bb58423ade1",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Filter already processed tx ids",
+        "func": "if (msg.lastIdsProcessed.includes(Number(msg.payload.id))) {\n    return null;\n} else {\n    return msg;\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 290,
+        "y": 320,
+        "wires":
+        [
+            [
+                "da21cd67302a9b9a"
+            ]
+        ]
+    },
+    {
+        "id": "38cdd361771790f6",
+        "type": "inject",
+        "z": "5e3c009b6b4ef141",
+        "name": "",
+        "props":
+        [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 520,
+        "y": 20,
+        "wires":
+        [
+            [
+                "3be8af516b25578b"
+            ]
+        ]
+    },
+    {
+        "id": "3be8af516b25578b",
+        "type": "change",
+        "z": "5e3c009b6b4ef141",
+        "name": "Get flow vars",
+        "rules":
+        [
+            {
+                "t": "set",
+                "p": "fireflyBudgetLatestTimestamp",
+                "pt": "msg",
+                "to": "#:(store)::fireflyBudgetLatestTimestamp",
+                "tot": "flow",
+                "dc": true
+            },
+            {
+                "t": "set",
+                "p": "fireflyBudgetIdsProcessedToday",
+                "pt": "msg",
+                "to": "#:(store)::fireflyBudgetIdsProcessedToday",
+                "tot": "flow",
+                "dc": true
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 670,
+        "y": 20,
+        "wires":
+        [
+            [
+                "7f6fd95215027d42"
+            ]
+        ]
+    },
+    {
+        "id": "7f6fd95215027d42",
+        "type": "debug",
+        "z": "5e3c009b6b4ef141",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 20,
+        "wires":
+        []
+    },
+    {
+        "id": "c1c71e855855af73",
+        "type": "function",
+        "z": "5e3c009b6b4ef141",
+        "name": "Filter to only one message per budget",
+        "func": "let incomingPayload = msg.payload;\nlet payload = [];\nlet budgetsSeen = new Set();\n\nincomingPayload.forEach((tx) => {\n    let journals = tx.attributes.transactions;\n    if (journals.length !== 1) {\n        node.error(`Transaction id ${tx.id} had unexpected journal count of ${journals.length}`);\n        return;\n    }\n    let budgetId = Number(journals[0].budget_id);\n    if (budgetsSeen.has(budgetId)) {\n        //node.error(`Budget id ${budgetId} already seen`);\n    } else {\n        //node.error(`Budget id ${budgetId} not seen, adding`);\n        budgetsSeen.add(budgetId);\n        payload.push(tx);\n    }\n});\n\nreturn {\n    ...msg,\n    payload\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs":
+        [],
+        "x": 350,
+        "y": 240,
+        "wires":
+        [
+            [
+                "38fcf0c3430e5a08",
+                "98028e35720ec74c"
+            ]
+        ]
+    },
+    {
+        "id": "fce3a7f5e5582954",
+        "type": "debug",
+        "z": "5e3c009b6b4ef141",
+        "name": "debug 6",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 220,
+        "wires":
+        []
+    },
+    {
+        "id": "98028e35720ec74c",
+        "type": "debug",
+        "z": "5e3c009b6b4ef141",
+        "name": "debug 7",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 260,
+        "wires":
+        []
+    },
+    {
+        "id": "042a1f1116d33a65",
+        "type": "debug",
+        "z": "5e3c009b6b4ef141",
+        "name": "debug 8",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 300,
+        "wires":
+        []
+    },
+    {
+        "id": "e6b30fc911073c7a",
+        "type": "debug",
+        "z": "5e3c009b6b4ef141",
+        "name": "debug 9",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 820,
+        "y": 340,
+        "wires":
+        []
+    },
+    {
+        "id": "6c181b53.32fa14",
+        "type": "server",
+        "name": "Home Assistant",
+        "addon": true
+    }
+]
