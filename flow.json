@@ -25,12 +25,13 @@
         "senderr": false,
         "headers":
         [],
-        "x": 570,
+        "x": 590,
         "y": 80,
         "wires":
         [
             [
-                "b9b760fb9b948f9a"
+                "b9b760fb9b948f9a",
+                "fce3a7f5e5582954"
             ]
         ]
     },
@@ -39,14 +40,14 @@
         "type": "function",
         "z": "5e3c009b6b4ef141",
         "name": "Get latest covered timestamp",
-        "func": "function timestampToDateString(timestamp) {\n    const date = new Date(timestamp);\n    const year = date.getFullYear();\n    const month = String(date.getMonth() + 1).padStart(2, '0'); // months are 0-indexed in JavaScript\n    const day = String(date.getDate()).padStart(2, '0');\n\n    return `${year}-${month}-${day}`;\n}\nlet fireflyUrl = global.get(\"fireflyUrl\", \"store\") || null;\nif (!fireflyUrl) {\n    node.error(\"No fireflyUrl defined\");\n    return null;\n}\nlet lastProcessedTimestamp = flow.get(\"fireflyBudgetLatestTimestamp\", \"store\") || 0;\nlet lastIdsProcessedJson = flow.get(\"fireflyBudgetIdsProcessedToday\", \"store\") || {ids:[]};\nlet lastIdsProcessed = lastIdsProcessedJson.ids;\nlet start = timestampToDateString(lastProcessedTimestamp);\nlet processingTimestamp = msg.processingTimestamp;\nlet end = timestampToDateString(processingTimestamp);\nreturn {\n    fireflyUrl,\n    lastProcessedTimestamp,\n    processingTimestamp,\n    lastIdsProcessed,\n    payload: {\n        start,\n        end,\n        type: \"withdrawal\",\n    },\n};",
+        "func": "/**\n* @param {Date} date\n*/\nfunction formatFireflyDateString(date) {\n    const year = date.getFullYear();\n    const month = String(date.getMonth() + 1).padStart(2, '0'); // months are 0-indexed in JavaScript\n    const day = String(date.getDate()).padStart(2, '0');\n\n    return `${year}-${month}-${day}`;\n}\n\nlet fireflyUrl = global.get(\"fireflyUrl\", \"store\") || null;\nif (!fireflyUrl) {\n    node.error(\"No fireflyUrl defined\");\n    return null;\n}\n\nlet lastIdsProcessedJson = flow.get(\"fireflyBudgetIdsProcessedToday\", \"store\") || {ids:[]};\nlet lastIdsProcessed = lastIdsProcessedJson.ids;\nlet processingTimestamp = msg.processingTimestamp;\nlet now = new Date(processingTimestamp);\nlet oneDayAgo = new Date();\noneDayAgo.setDate(now.getDate() - 1);\n// Define the start parameter of the Firefly query as one day ago\n// We need to do this to capture transactions that are created after their\n//  transaction timestamp, i.e. today a transaction will appear that occurred yesterday\n// This will miss transactions that lag by more than a day, and will\n//  also miss some transactions if this flow has not executed in more than a day.\n// Both of these cases seem acceptable given the \"low latency notification\" use\n//  case we're dealing with here.\nlet start = formatFireflyDateString(oneDayAgo);\n// Define the end parameter of the Firefly query as today\nlet end = formatFireflyDateString(now);\nreturn {\n    fireflyUrl,\n    processingTimestamp,\n    lastIdsProcessed,\n    payload: {\n        start,\n        end,\n        type: \"withdrawal\",\n    },\n};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs":
         [],
-        "x": 310,
+        "x": 330,
         "y": 80,
         "wires":
         [
@@ -126,24 +127,17 @@
         [
             {
                 "t": "set",
-                "p": "#:(store)::fireflyBudgetLatestTimestamp",
-                "pt": "flow",
-                "to": "1692074737000",
-                "tot": "num"
-            },
-            {
-                "t": "set",
                 "p": "#:(store)::fireflyBudgetIdsProcessedToday",
                 "pt": "flow",
-                "to": "{\"ids\":[]}",
+                "to": "{\"ids\":[3897,3895,3894,3898,3890,3889,3888,3887]}",
                 "tot": "json"
             },
             {
                 "t": "set",
                 "p": "processingTimestamp",
                 "pt": "msg",
-                "to": "1692074737000",
-                "tot": "num"
+                "to": "$millis()",
+                "tot": "jsonata"
             }
         ],
         "action": "",
@@ -174,7 +168,7 @@
         "wires":
         [
             [
-                "79d32bb58423ade1"
+                "da21cd67302a9b9a"
             ]
         ]
     },
@@ -237,8 +231,7 @@
         [
             [
                 "8f88b071ce75e4d4",
-                "999054927be107e2",
-                "fce3a7f5e5582954"
+                "999054927be107e2"
             ],
             []
         ]
@@ -248,7 +241,7 @@
         "type": "function",
         "z": "5e3c009b6b4ef141",
         "name": "Update processed ids and date",
-        "func": "function mergeAndDeduplicate(arr1, arr2) {\n    let merged = arr1.concat(arr2);\n    let unique = [...new Set(merged)];\n    return unique;\n}\n\nlet lastProcessedDate = new Date(msg.lastProcessedTimestamp);\nlet processingDate = new Date(msg.processingTimestamp);\nflow.set(\"fireflyBudgetLatestTimestamp\", msg.processingTimestamp, \"store\");\nlet lastIdsProcessed = msg.lastIdsProcessed;\nlet currentIdsProcessed = msg.payload.data.reduce(\n    (accumulator, currentValue) => {\n        accumulator.push(Number(currentValue.id));\n        return accumulator;\n    }, []);\nlet idsToWrite;\nif (lastProcessedDate.getDay() === processingDate.getDay()) {\n    // If we have not crossed over a day boundary since last processing,\n    //  add to the fireflyBudgetIdsProcessedToday array\n    idsToWrite = mergeAndDeduplicate(lastIdsProcessed, currentIdsProcessed);\n} else {\n    // If we have crossed over a day boundary since last processing,\n    //  reset the fireflyBudgetIdsProcessedToday array\n    // We may have some dingleberry ids from the previous day, but they\n    //  have no negative effect and it's not worth the effort to filter them out\n    idsToWrite = currentIdsProcessed;\n}\n// This assumes that the processing happening in parallel is successful,\n//  which we're going to go with for now for simplicity\nflow.set(\"fireflyBudgetIdsProcessedToday\", {ids:idsToWrite}, \"store\");",
+        "func": "// This set will be the ids of all current transactions from yesterday and today\nlet currentIdsProcessed = msg.payload.data.reduce(\n    (accumulator, currentValue) => {\n        accumulator.push(Number(currentValue.id));\n        return accumulator;\n    }, []);\n// This assumes that the processing happening in parallel is successful,\n//  which we're going to go with for now for simplicity\nflow.set(\"fireflyBudgetIdsProcessedToday\", { ids: currentIdsProcessed }, \"store\");\nflow.set(\"fireflyBudgetLatestTimestamp\", msg.processingTimestamp, \"store\");\n",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -300,7 +293,7 @@
         "finalize": "",
         "libs":
         [],
-        "x": 560,
+        "x": 320,
         "y": 320,
         "wires":
         [
@@ -354,7 +347,7 @@
         [],
         "entityId":
         [],
-        "data": "{\t    \"title\":\"Budget Update\",\t    \"message\": \"Transaction on \" & budgetName & \": $\" & spent & \" spent of $\" & totalAllocated & \" budgeted this month.\"\t}",
+        "data": "{\t    \"title\": budgetName & \" Transaction\",\t    \"message\": \"$\" & txSpent & \" spent at \" & $substring(txDescription,0,20) &\t    \". Budget status for this month: $\" & budgetSpent & \"/$\" & totalAllocated,\t    \"data\": {\t        \"url\": fireflyUrl & \"/transactions/show/\" & txId\t    }\t}",
         "dataType": "jsonata",
         "mergeContext": "",
         "mustacheAltTags": false,
@@ -373,7 +366,7 @@
         "type": "function",
         "z": "5e3c009b6b4ef141",
         "name": "Prepare notification",
-        "func": "let limits = msg.payload.data;\nif (limits.length !== 1) {\n    node.error(`Unexpected budget limit count ${limits.length}; dropping message.`);\n    return null;\n}\nlet limit = limits[0];\nlet budget = msg.payload.included[0];\nlet budgetName = budget.attributes.name;\nlet spent = Math.abs(Number(limit.attributes.spent));\nlet totalAllocated = Number(limit.attributes.amount);\n\nlet out = {\n    ...msg,\n    budgetName,\n    spent,\n    totalAllocated,\n};\ndelete out['payload'];\nreturn out;",
+        "func": "let limits = msg.payload.data;\nif (limits.length !== 1) {\n    node.error(`Unexpected budget limit count ${limits.length}; dropping message.`);\n    return null;\n}\nlet limit = limits[0];\nlet journal = msg.tx.attributes.transactions[0];\nlet txId = Number(msg.tx.id);\nlet txDescription = journal.description;\nlet txSpent = Number(journal.amount);\nlet budget = msg.payload.included[0];\nlet budgetName = budget.attributes.name;\nlet budgetSpent = Math.abs(Number(limit.attributes.spent));\nlet totalAllocated = Number(limit.attributes.amount);\n\nlet out = {\n    ...msg,\n    txId,\n    txDescription,\n    txSpent,\n    budgetName,\n    budgetSpent,\n    totalAllocated,\n};\ndelete out['payload'];\nreturn out;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -386,27 +379,6 @@
         [
             [
                 "baf98cb12f7d9290"
-            ]
-        ]
-    },
-    {
-        "id": "79d32bb58423ade1",
-        "type": "function",
-        "z": "5e3c009b6b4ef141",
-        "name": "Filter already processed tx ids",
-        "func": "if (msg.lastIdsProcessed.includes(Number(msg.payload.id))) {\n    return null;\n} else {\n    return msg;\n}",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs":
-        [],
-        "x": 290,
-        "y": 320,
-        "wires":
-        [
-            [
-                "da21cd67302a9b9a"
             ]
         ]
     },
@@ -501,15 +473,15 @@
         "id": "c1c71e855855af73",
         "type": "function",
         "z": "5e3c009b6b4ef141",
-        "name": "Filter to only one message per budget",
-        "func": "let incomingPayload = msg.payload;\nlet payload = [];\nlet budgetsSeen = new Set();\n\nincomingPayload.forEach((tx) => {\n    let journals = tx.attributes.transactions;\n    if (journals.length !== 1) {\n        node.error(`Transaction id ${tx.id} had unexpected journal count of ${journals.length}`);\n        return;\n    }\n    let budgetId = Number(journals[0].budget_id);\n    if (budgetsSeen.has(budgetId)) {\n        //node.error(`Budget id ${budgetId} already seen`);\n    } else {\n        //node.error(`Budget id ${budgetId} not seen, adding`);\n        budgetsSeen.add(budgetId);\n        payload.push(tx);\n    }\n});\n\nreturn {\n    ...msg,\n    payload\n};",
+        "name": "Filter to only one message per budget and unprocessed ids",
+        "func": "let incomingTxs = msg.payload;\nlet idsProcessed = new Set(msg.lastIdsProcessed);\nlet txsOut = [];\nlet budgetsSeen = new Set();\n\n// Diff transactions we pulled against lastIdsProcessed set\nincomingTxs.forEach((tx) => {\n    let journals = tx.attributes.transactions;\n    if (journals.length !== 1) {\n        node.error(`Transaction id ${tx.id} had unexpected journal count of ${journals.length}`);\n        return;\n    }\n    if (idsProcessed.has(Number(tx.id))) {\n        // If this transaction was already processed previously, skip it now\n        return;\n    }\n    // Limit to a single transaction per budget\n    let budgetId = Number(journals[0].budget_id);\n    if (budgetsSeen.has(budgetId)) {\n        //node.error(`Budget id ${budgetId} already seen`);\n    } else {\n        //node.error(`Budget id ${budgetId} not seen, adding`);\n        budgetsSeen.add(budgetId);\n        txsOut.push(tx);\n    }\n});\n\nreturn {\n    ...msg,\n    payload: txsOut,\n};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs":
         [],
-        "x": 350,
+        "x": 420,
         "y": 240,
         "wires":
         [
